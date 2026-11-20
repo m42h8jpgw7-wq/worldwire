@@ -58,7 +58,7 @@ async function main() {
   const withData = [];
   for (const iso of ISOS) {
     const news = {}, ed = google[iso] || {};
-    for (const cat of Object.keys(CATS)) {
+    for (const cat of CATS) {
       const pool_ = [...(ed[cat] || []), ...(byIso[iso] || []).filter((i) => i.cat === cat), ...(cat === 'top' ? guardian[iso] || [] : [])];
       const merged = mergeBalanced(pool_, PER_CAT);
       if (merged.length) news[cat] = merged;

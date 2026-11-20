@@ -103,7 +103,7 @@ export function summarize(it) {
 
 /* ---------- tone filter for the good-news mode (keyword based, transparent) ---------- */
 const POS = /\b(breakthrough|cure[sd]?|rescued|celebrat\w*|milestone|record[- ]high|record[- ]breaking|wins?|victory|triumph\w*|discover\w*|heartwarming|reunit\w*|donat\w*|kindness|inspir\w*|thriv\w*|returns? home|reforest\w*|rewild\w*|clean energy|good news|innovat\w*|saves?|saved|generous|joy\w*)\b/i;
-const NEGATE = /\b(no|not|fails?|failed|without|unlikely|denies|rejects?|trump|putin|netanyahu|vance|congress|senate|ceasefire|talks|summit|deal|election|votes?|voted)\b/i;
+const NEGATE = /\b(oil|crude|stocks?|shares|bitcoin|crypto|solana|etf|fed|hinges|sponsored|no|not|fails?|failed|without|unlikely|denies|rejects?|trump|putin|netanyahu|vance|congress|senate|ceasefire|talks|summit|deal|election|votes?|voted)\b/i;
 const NEG = /\b(kill\w*|dead|death\w*|die[sd]?|dying|attack\w*|war\b|bomb\w*|airstrike\w*|crash\w*|crisis|collaps\w*|flood\w*|earthquake|murder\w*|shoot\w*|shot|arrest\w*|scandal|threat\w*|fears?|injur\w*|wound\w*|victims?|sanction\w*|tension\w*|violen\w*|terror\w*|abus\w*|fraud|corrupt\w*|jail\w*|hostages?|famine|outbreak|disaster|plunge[sd]?|slump\w*|layoffs?|crackdown|conflict\w*|casualt\w*|massacre|genocide|rape\w*|stabb\w*|explosion|missile\w*|invasion|tragic|tragedy|devastat\w*|warns?|collapse|lawsuit|trial|strike[sd]?|protest\w*|toxic|cancer|pollut\w*|poverty|shortage)\b/i;
 export const isPositive = (it) => POS.test(it.title) && !NEGATE.test(it.title) && !it.title.trim().endsWith('?') && !NEG.test(`${it.title} ${it.text || ''}`);
 export const isNotNegative = (it) => !NEG.test(`${it.title} ${it.text || ''}`) && !/good news in history|horoscope|recipe/i.test(it.title);
@@ -134,11 +134,13 @@ const toks = (t) => new Set(t.toLowerCase().replace(/[^a-z0-9\s]/g, ' ').split(/
 const same = (a, b) => { let i = 0; for (const x of a) if (b.has(x)) i++; return i / (a.size + b.size - i || 1) >= 0.3 || (i >= 3 && i / Math.min(a.size, b.size) >= 0.4); };
 const CATW = { top: 1, business: 0.9, technology: 0.7, science: 0.6, sports: 0.4 };
 const PRIO = ['bbc', 'guardian', 'dw', 'aljazeera', 'google'];
+const TRUSTED = /^(BBC|Reuters|AP|Associated Press|The Guardian|DW|Al Jazeera|The New York Times|The Washington Post|Financial Times|Bloomberg|CNN|NPR|WSJ|The Wall Street Journal|The Economist|Politico|Axios|CNBC|France 24|Euronews|Sky News|ABC News|NBC News|CBS News|Deutsche Welle|South China Morning Post|The Times|Le Monde|Forbes|TIME|The Independent|Nikkei Asia|CNA|Straits Times)/i;
+const JUNK = /sponsored|presented by|opinion\b|horoscope|\bnfl\b|\bnba\b|coupon|giveaway/i;
 const label = (it) => (it.src === 'google' ? it.source : OUTLETS[it.src]) || it.source;
 
 export function buildBriefing(items, n = 5) {
   const uniq = [], seen = new Set();
-  for (const it of items) { const k = norm(it.title); if (!seen.has(k)) { seen.add(k); uniq.push({ ...it, t: toks(it.title) }); } }
+  for (const it of items) { const k = norm(it.title); if (!seen.has(k) && !JUNK.test(it.title)) { seen.add(k); uniq.push({ ...it, t: toks(it.title) }); } }
   const parent = uniq.map((_, i) => i);
   const find = (i) => (parent[i] === i ? i : (parent[i] = find(parent[i])));
   for (let i = 0; i < uniq.length; i++) for (let j = i + 1; j < uniq.length; j++) if (same(uniq[i].t, uniq[j].t)) parent[find(j)] = find(i);
@@ -149,7 +151,8 @@ export function buildBriefing(items, n = 5) {
     const outlets = [...new Set(g.map(label))];
     const newest = Math.max(...g.map((x) => (x.date ? +new Date(x.date) : 0)));
     const catW = Math.max(...g.map((x) => CATW[x.cat] ?? 0.5));
-    const score = new Set(g.map((x) => x.src)).size * 10 + catW * 3 + Math.max(0, 3 - (now - newest) / 36e5 / 12);
+    const trusted = g.some((x) => x.src !== 'google' || TRUSTED.test(x.source || ''));
+    const score = new Set(g.map(label)).size * 8 + (trusted ? 6 : -3) + catW * 3 + Math.max(0, 3 - (now - newest) / 36e5 / 12);
     const rep = [...g].sort((a, b) => PRIO.indexOf(a.src) - PRIO.indexOf(b.src) || (b.date || '').localeCompare(a.date || ''))[0];
     const sum = summarize(rep) || g.map(summarize).sort((a, b) => b.length - a.length)[0] || '';
     return { score, title: rep.title, url: rep.url, source: label(rep), src: rep.src, date: rep.date || new Date(newest).toISOString(), sum, outlets: outlets.slice(0, 4), n: outlets.length };
