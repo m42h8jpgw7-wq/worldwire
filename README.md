@@ -7,12 +7,15 @@ Dark 3D globe. Click a country → current headlines (5 categories), key indicat
 ## Data sources
 | What | Source |
 |---|---|
-| Headlines (Top, Business, Tech, Science, Sports) | Google News RSS, per-country edition |
+| Headlines (Top, Business, Tech, Science, Sports) | **5 outlets**: Google News (local media, per-country edition), BBC, The Guardian, Al Jazeera, DW — merged, de-duplicated and balanced per country |
 | GDP, population, growth, inflation, unemployment | World Bank Open Data |
 | Public holidays | Nager.Date |
-| Stock indices, gold/oil, FX (last daily close) | Yahoo Finance (Stooq fallback) |
+| Stock indices, gold/oil, FX (last daily close) | Stooq |
 | Crypto top 10 (+ live BTC/ETH in browser), Fear & Greed | CoinGecko, alternative.me |
 | Elections & central bank dates | `data/events.json` (curated, each with source link) |
+
+## How news is assembled
+Global feeds (BBC, Guardian, Al Jazeera, DW) are fetched once and matched to countries by name/demonym/capital (`data/aliases.json`, built by `scripts/build-aliases.mjs`). The Guardian also has per-country feeds; Google News adds local media for ~70 countries. Items are de-duplicated and interleaved so no single outlet dominates; each can be filtered in the UI.
 
 ## Setup
 1. Push this repo to GitHub.
@@ -33,5 +36,5 @@ Edit `data/events.json`: `{ "date": "YYYY-MM-DD", "country": "US" | "EU" | "ALL"
 - Countries without a Google News edition still show indicators and holidays.
 - Countries with an election in the next 60 days pulse on the globe.
 - `events.json` was compiled from public calendars (IDEA, Wikipedia, Fed, service-public.fr); dates can shift — keep it updated.
-- Some index symbols may be missing; they are skipped silently.
+- Some Stooq index symbols may be missing; they are skipped silently.
 - News links belong to their publishers; the site only shows headline, source and link.

@@ -9,14 +9,14 @@ const cats = ['top', 'business', 'technology', 'science', 'sports'];
 for (const f of geo.features) {
   const iso = f.properties.iso; if (!iso) continue;
   const news = Object.fromEntries(cats.map((c) => [c, Array.from({ length: 6 }, (_, i) => ({
-    title: `[SAMPLE] ${f.properties.name}: ${c} headline number ${i + 1} used for UI preview only`, source: 'Sample Wire',
+    title: `[SAMPLE] ${f.properties.name}: ${c} headline number ${i + 1} used for UI preview only`, source: ['BBC','The Guardian','Al Jazeera','DW','Reuters'][i % 5], src: ['bbc','guardian','aljazeera','dw','google'][i % 5],
     url: 'https://example.com', date: new Date(Date.now() - (i + 1) * 36e5 * 3).toISOString() }))]));
   const s = (v, y = 2024) => ({ v, y });
   await fs.writeFile(new URL(`countries/${iso}.json`, OUT), JSON.stringify({ iso, name: f.properties.name, updated: new Date().toISOString(), news,
     indicators: { gdp: s(1.234e12), pop: s(48.2e6), gdppc: s(25600), growth: s(2.1), inflation: s(3.4), unemployment: s(5.2) },
     holidays: [{ date: day(5), name: 'Sample Holiday A' }, { date: day(31), name: 'Sample Holiday B' }] }));
 }
-await fs.writeFile(new URL('index.json', OUT), JSON.stringify({ updated: new Date().toISOString(), countries: isos }));
+await fs.writeFile(new URL('index.json', OUT), JSON.stringify({ updated: new Date().toISOString(), countries: isos, outlets: { google: 'Google News', bbc: 'BBC', guardian: 'The Guardian', aljazeera: 'Al Jazeera', dw: 'DW' } }));
 console.log('mock data written for', isos.length, 'countries');
 const q = (price, chg) => ({ price, chg, date: day(0) });
 await fs.writeFile(new URL('markets.json', OUT), JSON.stringify({ updated: new Date().toISOString(),

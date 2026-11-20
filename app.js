@@ -9,7 +9,7 @@
   };
   const EU = new Set('AT BE BG HR CY CZ DK EE FI FR DE GR HU IE IT LV LT LU MT NL PL PT RO SK SI ES SE'.split(' '));
   const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
-  const state = { mode: null, sel: null, tab: 'news', cat: 'top', evCat: 'All', cache: {}, events: [], markets: null, withData: new Set(), idle: null, cent: {} };
+  const state = { src: 'all', outlets: {}, mode: null, sel: null, tab: 'news', cat: 'top', evCat: 'All', cache: {}, events: [], markets: null, withData: new Set(), idle: null, cent: {} };
 
   /* ---------- helpers ---------- */
   const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -140,11 +140,15 @@
     if (!data) return '<div class="empty">No data for this country yet. The data pipeline will pick it up on its next run.</div>';
     if (!data.news || !Object.keys(data.news).length) return '<div class="empty">No local news feed is available for this country.<br>Data and dates are still shown in the other tabs.</div>';
     const chips = CATS.map(([k, l]) => `<button class="chip ${k === state.cat ? 'active' : ''}" data-cat="${k}">${l}</button>`).join('');
-    const items = data.news[state.cat] || [];
+    const all = data.news[state.cat] || [];
+    const outs = [...new Set(all.map((n) => n.src).filter(Boolean))];
+    const src = outs.includes(state.src) ? state.src : 'all';
+    const items = src === 'all' ? all : all.filter((n) => n.src === src);
+    const srcChips = outs.length > 1 ? `<div class="chips src">${['all', ...outs].map((o) => `<button class="chip ${o === src ? 'active' : ''}" data-src="${o}">${o === 'all' ? 'All sources' : esc(state.outlets[o] || o)}</button>`).join('')}</div>` : '';
     const list = items.length ? items.map((n) => `
       <li><a href="${esc(safeUrl(n.url))}" target="_blank" rel="noopener noreferrer"><div class="t">${esc(n.title)}</div>
-      <div class="m"><b>${esc(n.source || '')}</b> · ${ago(n.date)}</div></a></li>`).join('') : '<li class="empty">Nothing in this category right now.</li>';
-    return `<div class="chips">${chips}</div><ul class="news">${list}</ul>`;
+      <div class="m"><b>${esc(n.source || '')}</b>${n.src === 'google' ? ' · via Google News' : ''} · ${ago(n.date)}</div></a></li>`).join('') : '<li class="empty">Nothing in this category right now.</li>';
+    return `<div class="chips">${chips}</div>${srcChips}<ul class="news">${list}</ul>`;
   }
 
   function renderData(data, iso) {
@@ -156,7 +160,7 @@
     };
     const stocks = idx.length ? `<h3>Stock market</h3><ul class="rows">${idx.map((x) => `<li class="row"><span class="nm">${esc(x.name)}</span><span class="px">${px(x.price)}</span><span class="ch">${chg(x.chg)}</span></li>`).join('')}</ul>` : '';
     return `<div class="grid">${S('GDP', 'gdp', fmtUsd)}${S('Population', 'pop', fmtNum)}${S('GDP / capita', 'gdppc', fmtUsd)}${S('GDP growth', 'growth', fmtPct, 1)}${S('Inflation (CPI)', 'inflation', fmtPct)}${S('Unemployment', 'unemployment', (v) => `${v.toFixed(1)}%`)}</div>${stocks}
-      <div class="src">Sources: World Bank Open Data (latest available year) · Yahoo Finance (index, last daily close).</div>`;
+      <div class="src">Sources: World Bank Open Data (latest available year) · Stooq (index, last daily close).</div>`;
   }
 
   const evCard = (e, opts = {}) => {
@@ -193,7 +197,7 @@
     if (m.crypto?.length) out += `<h3>Crypto · top ${m.crypto.length}</h3><ul class="rows">${m.crypto.map((x) => row(esc(x.name), x.symbol, '$' + px(x.price), x.chg)).join('')}</ul>`;
     const cf = [...(m.commodities || []).map((x) => row(esc(x.name), x.unit, px(x.price), x.chg)), ...(m.fx || []).map((x) => row(esc(x.name), '', px(x.price), x.chg))];
     if (cf.length) out += `<h3>Commodities &amp; FX</h3><ul class="rows">${cf.join('')}</ul>`;
-    return out + `<div class="src">Sources: Yahoo Finance (last daily close), CoinGecko, alternative.me. Updated ${ago(m.updated)}. Not financial advice.</div>`;
+    return out + `<div class="src">Sources: Stooq (last daily close), CoinGecko, alternative.me. Updated ${ago(m.updated)}. Not financial advice.</div>`;
   }
 
   /* ---------- ticker ---------- */
@@ -223,6 +227,7 @@
     const c = e.target.closest('.chip');
     if (c?.dataset.cat) { state.cat = c.dataset.cat; render(); }
     if (c?.dataset.ev) { state.evCat = c.dataset.ev; render(); }
+    if (c?.dataset.src) { state.src = c.dataset.src; render(); }
     const go = e.target.closest('[data-go]');
     if (go && !e.target.closest('a')) pick(go.dataset.go);
   });
@@ -260,7 +265,7 @@
     ]);
     feats = geo.features; state.events = evs; state.markets = mk;
     for (const f of feats) if (f.properties.iso && !state.cent[f.properties.iso]) state.cent[f.properties.iso] = centroid(f);
-    if (idx) { state.withData = new Set(idx.countries); $('#updated').textContent = `UPDATED ${ago(idx.updated).toUpperCase()}`; }
+    if (idx) { state.outlets = idx.outlets || {}; state.withData = new Set(idx.countries); $('#updated').textContent = `UPDATED ${ago(idx.updated).toUpperCase()}`; }
     else { const b = $('#banner'); b.hidden = false; b.textContent = 'No data yet — run the “Update data” workflow once (Actions tab) or `npm run update` locally.'; }
     globe.polygonsData(feats);
     updateRings(); renderTicker(); liveCrypto(); setInterval(liveCrypto, 60000);
