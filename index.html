@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>WORLDWIRE — the world, one click at a time</title>
+  <meta name="description" content="Interactive 3D globe. Click any country for current headlines, key data and upcoming dates.">
+  <meta name="theme-color" content="#05070a">
+  <meta property="og:title" content="WORLDWIRE">
+  <meta property="og:description" content="Dark 3D globe: news, markets, data and elections for every country.">
+  <meta property="og:type" content="website">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 32 32%27%3E%3Ccircle cx=%2716%27 cy=%2716%27 r=%2712%27 fill=%27%2305070a%27 stroke=%27%235eead4%27 stroke-width=%273%27/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <canvas id="stars" aria-hidden="true"></canvas>
+  <div id="globe" aria-label="Interactive globe"></div>
+
+  <header class="hud">
+    <div class="brand"><span class="dot"></span>WORLDWIRE</div>
+    <div class="search">
+      <input id="search" type="search" placeholder="Search country…" autocomplete="off" spellcheck="false" aria-label="Search country">
+      <ul id="results" hidden></ul>
+    </div>
+    <nav class="top-actions"><button id="btn-markets" class="pill">Markets</button><button id="btn-events" class="pill">Events</button></nav>
+    <div id="updated" class="meta"></div>
+  </header>
+
+  <div id="ticker" class="ticker" hidden></div>
+  <div id="hint" class="hint">Drag to rotate · scroll to zoom · click a country</div>
+  <div id="banner" class="banner" hidden></div>
+
+  <aside id="panel" class="panel" aria-live="polite" hidden>
+    <button id="close" class="close" aria-label="Close">✕</button>
+    <div class="p-head">
+      <div id="flag" class="flag"></div>
+      <div>
+        <h1 id="cname"></h1>
+        <div id="csub" class="sub"></div>
+      </div>
+    </div>
+    <nav class="tabs" id="tabs" role="tablist"></nav>
+    <div id="body" class="p-body"></div>
+  </aside>
+
+  <script src="vendor/globe.gl.min.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

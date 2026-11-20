@@ -1,0 +1,18 @@
+{
+  "name": "worldwire",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Interactive dark 3D globe: click a country for news, data and upcoming dates.",
+  "scripts": {
+    "update": "node scripts/update-data.mjs",
+    "mock": "node scripts/mock-data.mjs",
+    "serve": "npx serve ."
+  },
+  "devDependencies": {
+    "globe.gl": "^2",
+    "i18n-iso-countries": "^7",
+    "topojson-client": "^3",
+    "world-atlas": "^2"
+  }
+}
