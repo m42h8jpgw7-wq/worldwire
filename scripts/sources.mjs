@@ -102,10 +102,10 @@ export function summarize(it) {
 }
 
 /* ---------- tone filter for the good-news mode (keyword based, transparent) ---------- */
-const POS = /\b(breakthrough|cure[sd]?|rescue[sd]?|saved?|saves|celebrat\w*|milestone|record[- ]?(high|breaking|low unemployment)?|wins?|won|victory|discover\w*|hope\w*|recover\w*|restor\w*|revival|innovat\w*|inspir\w*|kindness|generous|donat\w*|reunit\w*|reunion|thriv\w*|boost\w*|progress|peace|freed|improv\w*|joy\w*|happy|heartwarming|renewable|conservation|protected|graduat\w*|award\w*|honou?r\w*|success\w*|solv\w*|vaccine|rebirth|returns home|opens|launch(es|ed)|goal|triumph|clean energy|solar|reforest\w*|rewild\w*|survivor)\b/i;
+const POS = /\b(breakthrough|cure[sd]?|rescued|saves?\b|celebrat\w*|milestone|record[- ](high|breaking)|wins?\b|victory|triumph\w*|discover\w*|heartwarming|reunit\w*|donat\w*|kindness|inspir\w*|thriv\w*|freed|returns? home|peace deal|reforest\w*|rewild\w*|clean energy|good news|restored|revival|innovat\w*|vaccine|saved|generous|joy\w*)\b/i;
 const NEG = /\b(kill\w*|dead|death\w*|die[sd]?|dying|attack\w*|war\b|bomb\w*|airstrike\w*|crash\w*|crisis|collaps\w*|flood\w*|earthquake|murder\w*|shoot\w*|shot|arrest\w*|scandal|threat\w*|fears?|injur\w*|wound\w*|victims?|sanction\w*|tension\w*|violen\w*|terror\w*|abus\w*|fraud|corrupt\w*|jail\w*|hostages?|famine|outbreak|disaster|plunge[sd]?|slump\w*|layoffs?|crackdown|conflict\w*|casualt\w*|massacre|genocide|rape\w*|stabb\w*|explosion|missile\w*|invasion|tragic|tragedy|devastat\w*|warns?|collapse|lawsuit|trial|strike[sd]?|protest\w*|toxic|cancer|pollut\w*|poverty|shortage)\b/i;
-export const isPositive = (it) => POS.test(`${it.title}`) && !NEG.test(`${it.title} ${it.text || ''}`);
-export const isNotNegative = (it) => !NEG.test(`${it.title} ${it.text || ''}`);
+export const isPositive = (it) => POS.test(it.title) && !it.title.trim().endsWith('?') && !NEG.test(`${it.title} ${it.text || ''}`);
+export const isNotNegative = (it) => !NEG.test(`${it.title} ${it.text || ''}`) && !/good news in history|horoscope|recipe/i.test(it.title);
 
 /* ---------- good-news sources ---------- */
 const GOOD_FEEDS = [['gnn', 'https://www.goodnewsnetwork.org/feed/'], ['positive', 'https://www.positive.news/feed/'], ['optimist', 'https://www.optimistdaily.com/feed/'], ['rtbc', 'https://reasonstobecheerful.world/feed/']];
@@ -153,4 +153,20 @@ export function buildBriefing(items, n = 5) {
     const sum = summarize(rep) || g.map(summarize).sort((a, b) => b.length - a.length)[0] || '';
     return { score, title: rep.title, url: rep.url, source: label(rep), src: rep.src, date: rep.date || new Date(newest).toISOString(), sum, outlets: outlets.slice(0, 4), n: outlets.length };
   }).sort((a, b) => b.score - a.score).slice(0, n).map(({ score, ...x }) => x);
+}
+
+/* ---------- Google News geo feed: stories ABOUT a place (the edition feeds are US-flavoured in English) ---------- */
+export async function fetchGoogleGeo(name) {
+  if (!name) return [];
+  const r = await get(`https://news.google.com/rss/headlines/section/geo/${encodeURIComponent(name)}?hl=en-US&gl=US&ceid=US:en`, 2);
+  return r ? parseRss(await r.text(), 12).map((n) => ({ ...n, src: 'google', cat: 'top' })) : [];
+}
+
+/* ---------- per-country relevance test (title/description mentions the country) ---------- */
+export function buildMentions(aliases) {
+  const cache = {};
+  return (iso, it) => {
+    cache[iso] ??= new RegExp(`(?<![\\p{L}\\p{N}])(?:${[...(aliases[iso] || [])].sort((a, b) => b.length - a.length).map(esc).join('|')})(?![\\p{L}\\p{N}])`, 'u');
+    return cache[iso].test(`${it.title} ${it.text || ''}`);
+  };
 }

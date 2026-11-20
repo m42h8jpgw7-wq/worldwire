@@ -3,7 +3,7 @@
 import fs from 'node:fs/promises';
 import { fetchMarkets } from './markets.mjs';
 import { get, parseRss, fetchGlobalFeeds, indexByCountry, fetchGuardianCountry, mergeBalanced, loadAliases, OUTLETS,
-  fetchGoodFeeds, fetchGoogleGood, queryName, isPositive, buildBriefing } from './sources.mjs';
+  fetchGoodFeeds, fetchGoogleGood, fetchGoogleGeo, buildMentions, queryName, isPositive, buildBriefing } from './sources.mjs';
 
 const OUT = new URL('../data/', import.meta.url);
 const geo = JSON.parse(await fs.readFile(new URL('countries.geo.json', OUT), 'utf8'));
@@ -66,19 +66,22 @@ async function main() {
   await fs.writeFile(new URL('good.json', OUT), JSON.stringify({ updated: new Date().toISOString(), items: goodGlobal.map((g) => ({ ...g, iso: Object.keys(goodByIso).find((k) => goodByIso[k].some((x) => x.url === g.url)) || null })) }));
   console.log('indicators:', Object.keys(ind).length, '| market quotes:', mk, '| global feed items:', globalItems.length, '| countries matched:', Object.keys(byIso).length);
 
-  const google = {}, guardian = {}, hol = {}, gGood = {};
+  const google = {}, guardian = {}, hol = {}, gGood = {}, gGeo = {};
+  const mentions = buildMentions(aliases);
   await pool(NEWS_CC, 6, async (cc) => { google[cc] = await fetchGoogle(cc); });
-  await pool(ISOS, 8, async (cc) => { guardian[cc] = await fetchGuardianCountry(cc, NAMES[cc]); hol[cc] = await fetchHolidays(cc); gGood[cc] = await fetchGoogleGood(cc, queryName(aliases[cc])); });
+  await pool(ISOS, 8, async (cc) => { guardian[cc] = await fetchGuardianCountry(cc, NAMES[cc]); hol[cc] = await fetchHolidays(cc); const place = queryName(aliases[cc]); gGood[cc] = await fetchGoogleGood(cc, place); gGeo[cc] = await fetchGoogleGeo(place); });
 
   const withData = [];
   for (const iso of ISOS) {
-    const news = {};
+    const news = {}, ed = google[iso] || {}, geoTop = gGeo[iso] || [];
+    const topPool = geoTop.length >= 4 ? geoTop : [...geoTop, ...(ed.top || [])]; // geo feed = stories about the country; edition feed only as fallback
     for (const cat of Object.keys(CATS)) {
-      const pool_ = [...(google[iso]?.[cat] || []), ...(byIso[iso] || []).filter((i) => i.cat === cat), ...(cat === 'top' ? guardian[iso] || [] : [])];
+      const pool_ = [...(cat === 'top' ? topPool : ed[cat] || []), ...(byIso[iso] || []).filter((i) => i.cat === cat), ...(cat === 'top' ? guardian[iso] || [] : [])];
       const merged = mergeBalanced(pool_, PER_CAT);
       if (merged.length) news[cat] = merged;
     }
-    const raw = [...Object.values(google[iso] || {}).flat(), ...(byIso[iso] || []), ...(guardian[iso] || [])];
+    const local = Object.entries(ed).filter(([k]) => k !== 'top').flatMap(([, v]) => v).filter((it) => mentions(iso, it));
+    const raw = [...topPool, ...local, ...(byIso[iso] || []), ...(guardian[iso] || [])];
     const briefing = buildBriefing(raw, 5);
     const good = mergeBalanced([...(gGood[iso] || []), ...(goodByIso[iso] || []), ...raw.filter(isPositive)], 12, true);
     const doc = { iso, name: NAMES[iso], updated: new Date().toISOString(), briefing, good, news, indicators: ind[iso] || {}, holidays: hol[iso] || [] };
