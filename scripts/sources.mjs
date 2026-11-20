@@ -62,9 +62,9 @@ export function buildMatcher(aliases) {
   const re = new RegExp(`(?<![\\p{L}\\p{N}])(?:${terms.map(esc).join('|')})(?![\\p{L}\\p{N}])`, 'gu');
   return (text) => { const hit = new Set(); for (const m of text.matchAll(re)) hit.add(map.get(m[0])); return hit; };
 }
-export function indexByCountry(items, aliases) {
+export function indexByCountry(items, aliases, titleOnly = false) {
   const match = buildMatcher(aliases), idx = {};
-  for (const it of items) for (const iso of match(`${it.title}. ${it.text}`)) (idx[iso] ??= []).push(it);
+  for (const it of items) for (const iso of match(titleOnly ? it.title : `${it.title}. ${it.text}`)) (idx[iso] ??= []).push(it);
   return idx;
 }
 
@@ -102,9 +102,10 @@ export function summarize(it) {
 }
 
 /* ---------- tone filter for the good-news mode (keyword based, transparent) ---------- */
-const POS = /\b(breakthrough|cure[sd]?|rescued|saves?\b|celebrat\w*|milestone|record[- ](high|breaking)|wins?\b|victory|triumph\w*|discover\w*|heartwarming|reunit\w*|donat\w*|kindness|inspir\w*|thriv\w*|freed|returns? home|peace deal|reforest\w*|rewild\w*|clean energy|good news|restored|revival|innovat\w*|vaccine|saved|generous|joy\w*)\b/i;
+const POS = /\b(breakthrough|cure[sd]?|rescued|celebrat\w*|milestone|record[- ]high|record[- ]breaking|wins?|victory|triumph\w*|discover\w*|heartwarming|reunit\w*|donat\w*|kindness|inspir\w*|thriv\w*|returns? home|reforest\w*|rewild\w*|clean energy|good news|innovat\w*|saves?|saved|generous|joy\w*)\b/i;
+const NEGATE = /\b(no|not|fails?|failed|without|unlikely|denies|rejects?|trump|putin|netanyahu|vance|congress|senate|ceasefire|talks|summit|deal|election|votes?|voted)\b/i;
 const NEG = /\b(kill\w*|dead|death\w*|die[sd]?|dying|attack\w*|war\b|bomb\w*|airstrike\w*|crash\w*|crisis|collaps\w*|flood\w*|earthquake|murder\w*|shoot\w*|shot|arrest\w*|scandal|threat\w*|fears?|injur\w*|wound\w*|victims?|sanction\w*|tension\w*|violen\w*|terror\w*|abus\w*|fraud|corrupt\w*|jail\w*|hostages?|famine|outbreak|disaster|plunge[sd]?|slump\w*|layoffs?|crackdown|conflict\w*|casualt\w*|massacre|genocide|rape\w*|stabb\w*|explosion|missile\w*|invasion|tragic|tragedy|devastat\w*|warns?|collapse|lawsuit|trial|strike[sd]?|protest\w*|toxic|cancer|pollut\w*|poverty|shortage)\b/i;
-export const isPositive = (it) => POS.test(it.title) && !it.title.trim().endsWith('?') && !NEG.test(`${it.title} ${it.text || ''}`);
+export const isPositive = (it) => POS.test(it.title) && !NEGATE.test(it.title) && !it.title.trim().endsWith('?') && !NEG.test(`${it.title} ${it.text || ''}`);
 export const isNotNegative = (it) => !NEG.test(`${it.title} ${it.text || ''}`) && !/good news in history|horoscope|recipe/i.test(it.title);
 
 /* ---------- good-news sources ---------- */
@@ -121,7 +122,7 @@ const BAD_NAME = /^(Islamic|Republic|Kingdom|People|Democratic|Federal|State of|
 export const queryName = (aliasList = []) => aliasList.find((a) => a.length >= 4 && !BAD_NAME.test(a) && /^[A-Z]/.test(a)) || aliasList[0];
 export async function fetchGoogleGood(iso, name) {
   if (!name) return [];
-  const q = `"${name}" (breakthrough OR rescued OR celebrates OR milestone OR discovery OR "record high" OR "peace deal" OR "returns home" OR cure OR triumph) when:14d`;
+  const q = `"${name}" (breakthrough OR rescued OR celebrates OR milestone OR discovery OR "record high" OR "returns home" OR cure OR heartwarming) when:14d`;
   const r = await get(`https://news.google.com/rss/search?q=${encodeURIComponent(q)}&hl=en&gl=US&ceid=US:en`, 2);
   if (!r) return [];
   return parseRss(await r.text(), 15).filter(isPositive).map((n) => ({ ...n, src: 'google', cat: 'good' }));
@@ -155,11 +156,23 @@ export function buildBriefing(items, n = 5) {
   }).sort((a, b) => b.score - a.score).slice(0, n).map(({ score, ...x }) => x);
 }
 
-/* ---------- Google News geo feed: stories ABOUT a place (the edition feeds are US-flavoured in English) ---------- */
-export async function fetchGoogleGeo(name) {
-  if (!name) return [];
-  const r = await get(`https://news.google.com/rss/headlines/section/geo/${encodeURIComponent(name)}?hl=en-US&gl=US&ceid=US:en`, 2);
-  return r ? parseRss(await r.text(), 12).map((n) => ({ ...n, src: 'google', cat: 'top' })) : [];
+/* ---------- Google News search per country (the edition feeds are US-flavoured in English) ---------- */
+const GQ = {
+  top: (n) => `"${n}" when:2d`,
+  business: (n) => `"${n}" (economy OR business OR markets OR company OR inflation) when:7d`,
+  technology: (n) => `"${n}" (technology OR AI OR startup OR tech) when:7d`,
+  science: (n) => `"${n}" (science OR research OR climate OR space OR health) when:7d`,
+  sports: (n) => `"${n}" (football OR sport OR olympic OR league OR tennis OR cricket) when:7d`,
+};
+export async function fetchGoogleSearch(name) {
+  const out = {};
+  if (!name) return out;
+  for (const [cat, q] of Object.entries(GQ)) {
+    const r = await get(`https://news.google.com/rss/search?q=${encodeURIComponent(q(name))}&hl=en-US&gl=US&ceid=US:en`, 2);
+    out[cat] = r ? parseRss(await r.text(), 10).map((n) => ({ ...n, src: 'google', cat })) : [];
+    await sleep(200);
+  }
+  return out;
 }
 
 /* ---------- per-country relevance test (title/description mentions the country) ---------- */
