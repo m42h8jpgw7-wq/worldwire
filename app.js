@@ -4,12 +4,12 @@
   const $ = (s) => document.querySelector(s);
   const CATS = [['top', 'Top'], ['business', 'Business'], ['technology', 'Tech'], ['science', 'Science'], ['sports', 'Sports']];
   const TABS = {
-    country: [['news', 'News'], ['data', 'Data'], ['upcoming', 'Upcoming']],
-    world: [['markets', 'Markets'], ['events', 'Events']],
+    country: [['briefing', 'Briefing'], ['news', 'News'], ['data', 'Data'], ['upcoming', 'Upcoming']],
+    world: [['markets', 'Markets'], ['events', 'Events'], ['good', 'Good news']],
   };
   const EU = new Set('AT BE BG HR CY CZ DK EE FI FR DE GR HU IE IT LV LT LU MT NL PL PT RO SK SI ES SE'.split(' '));
   const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
-  const state = { src: 'all', outlets: {}, mode: null, sel: null, tab: 'news', cat: 'top', evCat: 'All', cache: {}, events: [], markets: null, withData: new Set(), idle: null, cent: {} };
+  const state = { good: false, goodWorld: null, src: 'all', outlets: {}, mode: null, sel: null, tab: 'news', cat: 'top', evCat: 'All', cache: {}, events: [], markets: null, withData: new Set(), idle: null, cent: {} };
 
   /* ---------- helpers ---------- */
   const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -23,6 +23,7 @@
   const fmtPct = (v) => `${v > 0 ? '+' : ''}${v.toFixed(1)}%`;
   const px = (v) => v >= 1000 ? v.toLocaleString('en-US', { maximumFractionDigits: 0 }) : v >= 10 ? v.toLocaleString('en-US', { maximumFractionDigits: 2 }) : v.toLocaleString('en-US', { maximumFractionDigits: 4 });
   const chg = (v) => (v == null ? '' : `<span class="${v >= 0 ? 'up' : 'down'}">${v >= 0 ? '▲' : '▼'} ${Math.abs(v).toFixed(2)}%</span>`);
+  const rgb = () => (state.good ? '251,191,36' : '94,234,212');
   const upcoming = () => state.events.filter((e) => daysTo(e.date) >= 0).sort((a, b) => a.date.localeCompare(b.date));
 
   /* ---------- starfield ---------- */
@@ -47,12 +48,12 @@
     .polygonStrokeColor(() => 'rgba(120,150,190,0.22)')
     .polygonSideColor(() => 'rgba(0,0,0,0)')
     .polygonAltitude((d) => (d === state.sel || d === state.hover ? 0.035 : 0.006))
-    .polygonCapColor((d) => d === state.sel ? 'rgba(94,234,212,0.85)' : d === state.hover ? 'rgba(94,234,212,0.42)'
+    .polygonCapColor((d) => d === state.sel ? `rgba(${rgb()},0.85)` : d === state.hover ? `rgba(${rgb()},0.42)`
       : state.withData.has(d.properties.iso) ? '#161d2a' : '#0f131b')
     .polygonLabel(({ properties: p }) => `<div class="label">${flag(p.iso)} ${esc(p.name)}<small>${esc(p.iso || '')}</small></div>`)
     .onPolygonHover((d) => { state.hover = d; $('#globe').style.cursor = d ? 'pointer' : 'grab'; refresh(); })
     .onPolygonClick((d) => d && d.properties.iso && select(d))
-    .ringColor(() => (t) => `rgba(94,234,212,${(1 - t) * 0.8})`).ringMaxRadius(3.2).ringPropagationSpeed(1.6).ringRepeatPeriod(1800);
+    .ringColor(() => (t) => `rgba(${rgb()},${(1 - t) * 0.8})`).ringMaxRadius(3.2).ringPropagationSpeed(1.6).ringRepeatPeriod(1800);
   globe.renderer().setPixelRatio(Math.min(devicePixelRatio || 1, 2));
 
   const mat = globe.globeMaterial();
@@ -102,7 +103,7 @@
   async function select(d) {
     const iso = d.properties.iso;
     state.sel = d; pauseRotate(); ctl.autoRotate = false;
-    openPanel('country', state.mode === 'country' ? state.tab : 'news');
+    openPanel('country', state.mode === 'country' ? state.tab : 'briefing');
     $('#flag').textContent = flag(iso); $('#cname').textContent = d.properties.name; $('#csub').textContent = iso;
     history.replaceState(null, '', `#${iso}`);
     const c = centroid(d);
@@ -115,7 +116,7 @@
   function openWorld(tab) {
     state.sel = null; refresh(); pauseRotate();
     openPanel('world', tab);
-    $('#flag').textContent = '🌐'; $('#cname').textContent = tab === 'markets' ? 'Global markets' : 'Upcoming events'; $('#csub').textContent = 'WORLD OVERVIEW';
+    $('#flag').textContent = '🌐'; $('#cname').textContent = { markets: 'Global markets', events: 'Upcoming events', good: 'Good news' }[tab]; $('#csub').textContent = 'WORLD OVERVIEW';
     history.replaceState(null, '', `#${tab}`);
     globe.pointOfView({ altitude: 2.4 }, reduce ? 0 : 900);
     render();
@@ -131,12 +132,18 @@
     document.querySelectorAll('.tab').forEach((t) => t.classList.toggle('active', t.dataset.tab === state.tab));
     const el = $('#body'), iso = state.sel?.properties.iso;
     el.innerHTML = state.mode === 'world'
-      ? (state.tab === 'markets' ? renderMarkets() : renderEvents())
-      : (state.tab === 'news' ? renderNews(state.data) : state.tab === 'data' ? renderData(state.data, iso) : renderUpcoming(state.data, iso));
+      ? (state.tab === 'markets' ? renderMarkets() : state.tab === 'events' ? renderEvents() : renderGoodWorld())
+      : (state.tab === 'briefing' ? renderBriefing(state.data, iso) : state.tab === 'news' ? renderNews(state.data) : state.tab === 'data' ? renderData(state.data, iso) : renderUpcoming(state.data, iso));
     el.scrollTop = 0;
   }
 
+  const newsItem = (n) => `
+      <li><a href="${esc(safeUrl(n.url))}" target="_blank" rel="noopener noreferrer"><div class="t">${esc(n.title)}</div>${n.sum ? `<div class="s">${esc(n.sum)}</div>` : ''}
+      <div class="m"><b>${esc(n.source || '')}</b>${n.src === 'google' ? ' · via Google News' : ''} · ${ago(n.date)}</div></a></li>`;
+  const goodEmpty = '<div class="empty">No positive stories found for this country right now.<br><br><button class="chip" data-world="good">☀ Good news from around the world</button></div>';
+
   function renderNews(data) {
+    if (state.good) { const g = data?.good || []; return `<div class="notice">☀ Good-news mode — positive stories only</div>${g.length ? `<ul class="news">${g.map(newsItem).join('')}</ul>` : goodEmpty}`; }
     if (!data) return '<div class="empty">No data for this country yet. The data pipeline will pick it up on its next run.</div>';
     if (!data.news || !Object.keys(data.news).length) return '<div class="empty">No local news feed is available for this country.<br>Data and dates are still shown in the other tabs.</div>';
     const chips = CATS.map(([k, l]) => `<button class="chip ${k === state.cat ? 'active' : ''}" data-cat="${k}">${l}</button>`).join('');
@@ -200,6 +207,39 @@
     return out + `<div class="src">Sources: Stooq (last daily close), CoinGecko, alternative.me. Updated ${ago(m.updated)}. Not financial advice.</div>`;
   }
 
+  function renderBriefing(data, iso) {
+    const stories = state.good ? (data?.good || []).slice(0, 5) : (data?.briefing || []);
+    const story = (b) => `<li><a href="${esc(safeUrl(b.url))}" target="_blank" rel="noopener noreferrer"><div class="t">${esc(b.title)}</div>${b.sum ? `<div class="s">${esc(b.sum)}</div>` : ''}
+      <div class="m">${b.n > 1 ? `<b>${b.n} sources</b> · ${esc(b.outlets.join(', '))}` : `<b>${esc(b.source || '')}</b>`} · ${ago(b.date)}</div></a></li>`;
+    let out = state.good ? '<div class="notice">☀ Good-news mode — positive stories only</div>' : '';
+    out += `<h3>${state.good ? 'Good news' : 'Key stories'}</h3>` + (stories.length ? `<ol class="brief">${stories.map(story).join('')}</ol>`
+      : state.good ? goodEmpty : '<div class="empty">No stories available for this country yet.</div>');
+    const i = data?.indicators || {};
+    const g = [['GDP', 'gdp', fmtUsd], ['Growth', 'growth', fmtPct], ['Inflation', 'inflation', fmtPct]].filter(([, k]) => i[k]?.v != null)
+      .map(([l, k, f]) => `<div class="stat"><div class="l">${l}</div><div class="v ${k === 'growth' ? (i[k].v >= 0 ? 'pos' : 'neg') : ''}">${f(i[k].v)}</div></div>`).join('');
+    if (g) out += `<h3>At a glance</h3><div class="grid three">${g}</div>`;
+    const next = upcoming().filter((e) => e.country === iso || e.country === 'ALL' || (e.country === 'EU' && EU.has(iso)))[0]
+      || ((data?.holidays || []).filter((h) => daysTo(h.date) >= 0).map((h) => ({ date: h.date, title: h.name }))[0]);
+    if (next) out += `<h3>Next up</h3><ul class="events">${evCard({ ...next, big: !!next.category })}</ul>`;
+    return out;
+  }
+
+  function renderGoodWorld() {
+    const items = state.goodWorld?.items || [];
+    if (!items.length) return '<div class="empty">No good-news stories yet — they appear after the next data run.</div>';
+    return `<div class="notice">☀ Positive stories from Good News Network, Positive News, Optimist Daily and Reasons to be Cheerful</div><ul class="news">${items.map((n) => `
+      <li><a href="${esc(safeUrl(n.url))}" target="_blank" rel="noopener noreferrer"><div class="t">${n.iso ? `<span class="flagtag">${flag(n.iso)}</span>` : ''}${esc(n.title)}</div>${n.sum ? `<div class="s">${esc(n.sum)}</div>` : ''}
+      <div class="m"><b>${esc(n.source || '')}</b> · ${ago(n.date)}</div></a></li>`).join('')}</ul>`;
+  }
+
+  function setGood(v, silent) {
+    state.good = v; document.body.classList.toggle('good', v); $('#btn-good').classList.toggle('on', v);
+    globe.atmosphereColor(v ? '#fbbf24' : '#5eead4'); refresh();
+    try { localStorage.setItem('ww-good', v ? '1' : '0'); } catch { /* ignore */ }
+    if (silent) return;
+    if (state.mode) render(); else if (v) openWorld('good');
+  }
+
   /* ---------- ticker ---------- */
   function renderTicker() {
     const m = state.markets; if (!m) return;
@@ -228,6 +268,7 @@
     if (c?.dataset.cat) { state.cat = c.dataset.cat; render(); }
     if (c?.dataset.ev) { state.evCat = c.dataset.ev; render(); }
     if (c?.dataset.src) { state.src = c.dataset.src; render(); }
+    const w = e.target.closest('[data-world]'); if (w) { openWorld(w.dataset.world); return; }
     const go = e.target.closest('[data-go]');
     if (go && !e.target.closest('a')) pick(go.dataset.go);
   });
@@ -237,6 +278,7 @@
     if (state.mode === 'world') openWorld(state.tab); else render();
   });
   $('#close').addEventListener('click', close);
+  $('#btn-good').addEventListener('click', () => setGood(!state.good));
   $('#btn-markets').addEventListener('click', () => (state.mode === 'world' && state.tab === 'markets' ? close() : openWorld('markets')));
   $('#btn-events').addEventListener('click', () => (state.mode === 'world' && state.tab === 'events' ? close() : openWorld('events')));
   $('#ticker').addEventListener('click', () => openWorld('markets'));
@@ -257,13 +299,15 @@
 
   /* boot */
   (async () => {
-    const [geo, idx, evs, mk] = await Promise.all([
+    const [geo, idx, evs, mk, gw] = await Promise.all([
       getJSON('data/countries.geo.json'),
       getJSON('data/index.json').catch(() => null),
       getJSON('data/events.json').catch(() => []),
       getJSON('data/markets.json').catch(() => null),
+      getJSON('data/good.json').catch(() => null),
     ]);
-    feats = geo.features; state.events = evs; state.markets = mk;
+    feats = geo.features; state.events = evs; state.markets = mk; state.goodWorld = gw;
+    try { if (localStorage.getItem('ww-good') === '1') setGood(true, true); } catch { /* storage unavailable */ }
     for (const f of feats) if (f.properties.iso && !state.cent[f.properties.iso]) state.cent[f.properties.iso] = centroid(f);
     if (idx) { state.outlets = idx.outlets || {}; state.withData = new Set(idx.countries); $('#updated').textContent = `UPDATED ${ago(idx.updated).toUpperCase()}`; }
     else { const b = $('#banner'); b.hidden = false; b.textContent = 'No data yet — run the “Update data” workflow once (Actions tab) or `npm run update` locally.'; }
@@ -271,6 +315,6 @@
     updateRings(); renderTicker(); liveCrypto(); setInterval(liveCrypto, 60000);
     globe.pointOfView({ lat: 25, lng: 10, altitude: 2.4 });
     const h = location.hash.slice(1);
-    if (h === 'markets' || h === 'events') setTimeout(() => openWorld(h), 400); else if (h) setTimeout(() => pick(h.toUpperCase()), 600);
+    if (h === 'markets' || h === 'events' || h === 'good') setTimeout(() => openWorld(h), 400); else if (h) setTimeout(() => pick(h.toUpperCase()), 600);
   })();
 })();

@@ -17,6 +17,10 @@ Dark 3D globe. Click a country → current headlines (5 categories), key indicat
 ## How news is assembled
 Global feeds (BBC, Guardian, Al Jazeera, DW) are fetched once and matched to countries by name/demonym/capital (`data/aliases.json`, built by `scripts/build-aliases.mjs`). The Guardian also has per-country feeds; Google News adds local media for ~70 countries. Items are de-duplicated and interleaved so no single outlet dominates; each can be filtered in the UI.
 
+## Briefing & good news
+- **Briefing tab:** the same story reported by several outlets is clustered, ranked (more outlets + newer = higher) and shown with the one-sentence lede from the feed. No AI key needed.
+- **Good-news mode (☀):** positive-only stories from Good News Network, Positive News, Optimist Daily, Reasons to be Cheerful plus a positive Google News query per country. Items are keyword-filtered (see `scripts/sources.mjs`).
+
 ## Setup
 1. Push this repo to GitHub.
 2. **Settings → Pages**: deploy from branch `main`, folder `/ (root)`.

@@ -2,7 +2,8 @@
 // and markets, then writes static JSON into /data. No API keys, no dependencies (Node 18+).
 import fs from 'node:fs/promises';
 import { fetchMarkets } from './markets.mjs';
-import { get, parseRss, fetchGlobalFeeds, indexByCountry, fetchGuardianCountry, mergeBalanced, loadAliases, OUTLETS } from './sources.mjs';
+import { get, parseRss, fetchGlobalFeeds, indexByCountry, fetchGuardianCountry, mergeBalanced, loadAliases, OUTLETS,
+  fetchGoodFeeds, fetchGoogleGood, queryName, isPositive, buildBriefing } from './sources.mjs';
 
 const OUT = new URL('../data/', import.meta.url);
 const geo = JSON.parse(await fs.readFile(new URL('countries.geo.json', OUT), 'utf8'));
@@ -57,15 +58,17 @@ async function main() {
   await fs.mkdir(new URL('countries/', OUT), { recursive: true });
   const aliases = await loadAliases(OUT);
 
-  const [ind, markets, globalItems] = await Promise.all([fetchIndicators(), fetchMarkets(), fetchGlobalFeeds()]);
+  const [ind, markets, globalItems, goodItems] = await Promise.all([fetchIndicators(), fetchMarkets(), fetchGlobalFeeds(), fetchGoodFeeds()]);
   const mk = markets.indices.length + markets.crypto.length + markets.fx.length + markets.commodities.length;
   if (mk) await fs.writeFile(new URL('markets.json', OUT), JSON.stringify(markets));
-  const byIso = indexByCountry(globalItems, aliases);
+  const byIso = indexByCountry(globalItems, aliases), goodByIso = indexByCountry(goodItems, aliases);
+  const goodGlobal = mergeBalanced(goodItems, 24, true);
+  await fs.writeFile(new URL('good.json', OUT), JSON.stringify({ updated: new Date().toISOString(), items: goodGlobal.map((g) => ({ ...g, iso: Object.keys(goodByIso).find((k) => goodByIso[k].some((x) => x.url === g.url)) || null })) }));
   console.log('indicators:', Object.keys(ind).length, '| market quotes:', mk, '| global feed items:', globalItems.length, '| countries matched:', Object.keys(byIso).length);
 
-  const google = {}, guardian = {}, hol = {};
+  const google = {}, guardian = {}, hol = {}, gGood = {};
   await pool(NEWS_CC, 6, async (cc) => { google[cc] = await fetchGoogle(cc); });
-  await pool(ISOS, 8, async (cc) => { guardian[cc] = await fetchGuardianCountry(cc, NAMES[cc]); hol[cc] = await fetchHolidays(cc); });
+  await pool(ISOS, 8, async (cc) => { guardian[cc] = await fetchGuardianCountry(cc, NAMES[cc]); hol[cc] = await fetchHolidays(cc); gGood[cc] = await fetchGoogleGood(cc, queryName(aliases[cc])); });
 
   const withData = [];
   for (const iso of ISOS) {
@@ -75,7 +78,10 @@ async function main() {
       const merged = mergeBalanced(pool_, PER_CAT);
       if (merged.length) news[cat] = merged;
     }
-    const doc = { iso, name: NAMES[iso], updated: new Date().toISOString(), news, indicators: ind[iso] || {}, holidays: hol[iso] || [] };
+    const raw = [...Object.values(google[iso] || {}).flat(), ...(byIso[iso] || []), ...(guardian[iso] || [])];
+    const briefing = buildBriefing(raw, 5);
+    const good = mergeBalanced([...(gGood[iso] || []), ...(goodByIso[iso] || []), ...raw.filter(isPositive)], 12, true);
+    const doc = { iso, name: NAMES[iso], updated: new Date().toISOString(), briefing, good, news, indicators: ind[iso] || {}, holidays: hol[iso] || [] };
     if (!Object.keys(news).length && !Object.keys(doc.indicators).length && !doc.holidays.length) continue;
     await fs.writeFile(new URL(`countries/${iso}.json`, OUT), JSON.stringify(doc));
     withData.push(iso);

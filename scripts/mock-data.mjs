@@ -12,7 +12,10 @@ for (const f of geo.features) {
     title: `[SAMPLE] ${f.properties.name}: ${c} headline number ${i + 1} used for UI preview only`, source: ['BBC','The Guardian','Al Jazeera','DW','Reuters'][i % 5], src: ['bbc','guardian','aljazeera','dw','google'][i % 5],
     url: 'https://example.com', date: new Date(Date.now() - (i + 1) * 36e5 * 3).toISOString() }))]));
   const s = (v, y = 2024) => ({ v, y });
-  await fs.writeFile(new URL(`countries/${iso}.json`, OUT), JSON.stringify({ iso, name: f.properties.name, updated: new Date().toISOString(), news,
+  const brief = Array.from({ length: 5 }, (_, i) => ({ title: `[SAMPLE] ${f.properties.name} key story ${i + 1}`, url: 'https://example.com', source: 'BBC', src: 'bbc', date: new Date(Date.now() - (i + 1) * 36e5).toISOString(),
+    sum: 'One-sentence summary taken from the feed, for UI preview only.', outlets: ['BBC', 'DW', 'The Guardian'].slice(0, 3 - (i % 3)), n: 3 - (i % 3) }));
+  const good = Array.from({ length: 4 }, (_, i) => ({ title: `[SAMPLE] Good news from ${f.properties.name} ${i + 1}`, url: 'https://example.com', source: 'Good News Network', src: 'gnn', date: new Date(Date.now() - (i + 2) * 36e5).toISOString(), sum: 'A positive story, preview only.' }));
+  await fs.writeFile(new URL(`countries/${iso}.json`, OUT), JSON.stringify({ iso, name: f.properties.name, updated: new Date().toISOString(), briefing: brief, good, news,
     indicators: { gdp: s(1.234e12), pop: s(48.2e6), gdppc: s(25600), growth: s(2.1), inflation: s(3.4), unemployment: s(5.2) },
     holidays: [{ date: day(5), name: 'Sample Holiday A' }, { date: day(31), name: 'Sample Holiday B' }] }));
 }
@@ -23,3 +26,5 @@ await fs.writeFile(new URL('markets.json', OUT), JSON.stringify({ updated: new D
   indices: [['S&P 500','US'],['DAX','DE'],['FTSE 100','GB'],['Nikkei 225','JP']].map(([name, country], i) => ({ name, country, ...q(5000 + i * 3000.55, i % 2 ? -0.6 : 0.8) })),
   commodities: [{ name: 'Gold', unit: 'USD/oz', ...q(2650.2, 0.3) }], fx: [{ name: 'EUR/USD', ...q(1.0812, -0.12) }],
   crypto: [{ symbol: 'BTC', name: 'Bitcoin', price: 98000, chg: 2.1 }, { symbol: 'ETH', name: 'Ethereum', price: 3400, chg: -1.4 }], fng: { value: 64, label: 'Greed' } }));
+
+await fs.writeFile(new URL('good.json', OUT), JSON.stringify({ updated: new Date().toISOString(), items: [{ title: '[SAMPLE] Global good story', url: 'https://example.com', source: 'Positive News', src: 'positive', date: new Date().toISOString(), sum: 'Preview only.', iso: 'DE' }] }));

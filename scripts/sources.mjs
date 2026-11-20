@@ -2,7 +2,7 @@
 // Global feeds are matched to countries via data/aliases.json; Guardian also has per-country feeds.
 import fs from 'node:fs/promises';
 
-export const OUTLETS = { google: 'Google News', bbc: 'BBC', guardian: 'The Guardian', aljazeera: 'Al Jazeera', dw: 'DW' };
+export const OUTLETS = { google: 'Google News', bbc: 'BBC', guardian: 'The Guardian', aljazeera: 'Al Jazeera', dw: 'DW', gnn: 'Good News Network', positive: 'Positive News', optimist: 'Optimist Daily', rtbc: 'Reasons to be Cheerful' };
 const UA = { 'user-agent': 'Mozilla/5.0 (compatible; worldwire-bot/1.0; +https://github.com)' };
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -79,7 +79,7 @@ export async function fetchGuardianCountry(iso, name) {
 
 /* ---------- merge: dedupe + balanced across outlets ---------- */
 const norm = (t) => t.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim().slice(0, 70);
-export function mergeBalanced(items, n = 12) {
+export function mergeBalanced(items, n = 12, keepSum = false) {
   const seen = new Set(), groups = {};
   for (const it of items.sort((a, b) => (b.date || '').localeCompare(a.date || ''))) {
     const k = norm(it.title); if (seen.has(k)) continue; seen.add(k);
@@ -87,7 +87,70 @@ export function mergeBalanced(items, n = 12) {
   }
   const lists = Object.values(groups), out = [];
   for (let i = 0; out.length < n && lists.some((l) => l[i]); i++) for (const l of lists) if (l[i] && out.length < n) out.push(l[i]);
-  return out.sort((a, b) => (b.date || '').localeCompare(a.date || '')).map(({ title, source, src, url, date }) => ({ title, source, src, url, date }));
+  return out.sort((a, b) => (b.date || '').localeCompare(a.date || '')).map((it) => ({ title: it.title, source: it.source, src: it.src, url: it.url, date: it.date, ...(keepSum ? { sum: summarize(it) } : {}) }));
 }
 
 export const loadAliases = async (dir) => JSON.parse(await fs.readFile(new URL('aliases.json', dir), 'utf8'));
+
+/* ---------- one-sentence summary from the feed description ---------- */
+export function summarize(it) {
+  let t = (it.text || '').replace(/\s+/g, ' ').trim();
+  if (!t || t.toLowerCase().includes(it.title.toLowerCase().slice(0, 40))) return ''; // Google News descriptions just repeat the headline
+  t = t.split(/(?<=[.!?])\s+(?=[A-Z"'])/)[0];
+  if (t.length > 200) t = t.slice(0, 200).replace(/\s+\S*$/, '') + '…';
+  return t.length < 25 ? '' : t;
+}
+
+/* ---------- tone filter for the good-news mode (keyword based, transparent) ---------- */
+const POS = /\b(breakthrough|cure[sd]?|rescue[sd]?|saved?|saves|celebrat\w*|milestone|record[- ]?(high|breaking|low unemployment)?|wins?|won|victory|discover\w*|hope\w*|recover\w*|restor\w*|revival|innovat\w*|inspir\w*|kindness|generous|donat\w*|reunit\w*|reunion|thriv\w*|boost\w*|progress|peace|freed|improv\w*|joy\w*|happy|heartwarming|renewable|conservation|protected|graduat\w*|award\w*|honou?r\w*|success\w*|solv\w*|vaccine|rebirth|returns home|opens|launch(es|ed)|goal|triumph|clean energy|solar|reforest\w*|rewild\w*|survivor)\b/i;
+const NEG = /\b(kill\w*|dead|death\w*|die[sd]?|dying|attack\w*|war\b|bomb\w*|airstrike\w*|crash\w*|crisis|collaps\w*|flood\w*|earthquake|murder\w*|shoot\w*|shot|arrest\w*|scandal|threat\w*|fears?|injur\w*|wound\w*|victims?|sanction\w*|tension\w*|violen\w*|terror\w*|abus\w*|fraud|corrupt\w*|jail\w*|hostages?|famine|outbreak|disaster|plunge[sd]?|slump\w*|layoffs?|crackdown|conflict\w*|casualt\w*|massacre|genocide|rape\w*|stabb\w*|explosion|missile\w*|invasion|tragic|tragedy|devastat\w*|warns?|collapse|lawsuit|trial|strike[sd]?|protest\w*|toxic|cancer|pollut\w*|poverty|shortage)\b/i;
+export const isPositive = (it) => POS.test(`${it.title}`) && !NEG.test(`${it.title} ${it.text || ''}`);
+export const isNotNegative = (it) => !NEG.test(`${it.title} ${it.text || ''}`);
+
+/* ---------- good-news sources ---------- */
+const GOOD_FEEDS = [['gnn', 'https://www.goodnewsnetwork.org/feed/'], ['positive', 'https://www.positive.news/feed/'], ['optimist', 'https://www.optimistdaily.com/feed/'], ['rtbc', 'https://reasonstobecheerful.world/feed/']];
+export async function fetchGoodFeeds() {
+  const items = [];
+  await Promise.all(GOOD_FEEDS.map(async ([src, url]) => {
+    const r = await get(url, 2); if (!r) { console.log('good feed failed:', src); return; }
+    for (const it of parseRss(await r.text(), 30)) if (isNotNegative(it)) items.push({ ...it, src, cat: 'good', source: OUTLETS[src] });
+  }));
+  return items;
+}
+const BAD_NAME = /^(Islamic|Republic|Kingdom|People|Democratic|Federal|State of|Plurinational|Bolivarian|United Republic|Commonwealth)/;
+export const queryName = (aliasList = []) => aliasList.find((a) => a.length >= 4 && !BAD_NAME.test(a) && /^[A-Z]/.test(a)) || aliasList[0];
+export async function fetchGoogleGood(iso, name) {
+  if (!name) return [];
+  const q = `"${name}" (breakthrough OR rescued OR celebrates OR milestone OR discovery OR "record high" OR "peace deal" OR "returns home" OR cure OR triumph) when:14d`;
+  const r = await get(`https://news.google.com/rss/search?q=${encodeURIComponent(q)}&hl=en&gl=US&ceid=US:en`, 2);
+  if (!r) return [];
+  return parseRss(await r.text(), 15).filter(isPositive).map((n) => ({ ...n, src: 'google', cat: 'good' }));
+}
+
+/* ---------- briefing: cluster the same story across outlets, rank, summarize ---------- */
+const STOP = new Set('the and for with from after over into amid says said will could would more than about this that have has been what when where which their there they them were your you our out new year week day'.split(' '));
+const toks = (t) => new Set(t.toLowerCase().replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).filter((w) => w.length > 3 && !STOP.has(w)).map((w) => w.slice(0, 5)));
+const same = (a, b) => { let i = 0; for (const x of a) if (b.has(x)) i++; return i / (a.size + b.size - i || 1) >= 0.3 || (i >= 3 && i / Math.min(a.size, b.size) >= 0.4); };
+const CATW = { top: 1, business: 0.9, technology: 0.7, science: 0.6, sports: 0.4 };
+const PRIO = ['bbc', 'guardian', 'dw', 'aljazeera', 'google'];
+const label = (it) => (it.src === 'google' ? it.source : OUTLETS[it.src]) || it.source;
+
+export function buildBriefing(items, n = 5) {
+  const uniq = [], seen = new Set();
+  for (const it of items) { const k = norm(it.title); if (!seen.has(k)) { seen.add(k); uniq.push({ ...it, t: toks(it.title) }); } }
+  const parent = uniq.map((_, i) => i);
+  const find = (i) => (parent[i] === i ? i : (parent[i] = find(parent[i])));
+  for (let i = 0; i < uniq.length; i++) for (let j = i + 1; j < uniq.length; j++) if (same(uniq[i].t, uniq[j].t)) parent[find(j)] = find(i);
+  const groups = {};
+  uniq.forEach((it, i) => (groups[find(i)] ??= []).push(it));
+  const now = Date.now();
+  return Object.values(groups).map((g) => {
+    const outlets = [...new Set(g.map(label))];
+    const newest = Math.max(...g.map((x) => (x.date ? +new Date(x.date) : 0)));
+    const catW = Math.max(...g.map((x) => CATW[x.cat] ?? 0.5));
+    const score = new Set(g.map((x) => x.src)).size * 10 + catW * 3 + Math.max(0, 3 - (now - newest) / 36e5 / 12);
+    const rep = [...g].sort((a, b) => PRIO.indexOf(a.src) - PRIO.indexOf(b.src) || (b.date || '').localeCompare(a.date || ''))[0];
+    const sum = summarize(rep) || g.map(summarize).sort((a, b) => b.length - a.length)[0] || '';
+    return { score, title: rep.title, url: rep.url, source: label(rep), src: rep.src, date: rep.date || new Date(newest).toISOString(), sum, outlets: outlets.slice(0, 4), n: outlets.length };
+  }).sort((a, b) => b.score - a.score).slice(0, n).map(({ score, ...x }) => x);
+}
