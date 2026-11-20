@@ -156,7 +156,7 @@
     };
     const stocks = idx.length ? `<h3>Stock market</h3><ul class="rows">${idx.map((x) => `<li class="row"><span class="nm">${esc(x.name)}</span><span class="px">${px(x.price)}</span><span class="ch">${chg(x.chg)}</span></li>`).join('')}</ul>` : '';
     return `<div class="grid">${S('GDP', 'gdp', fmtUsd)}${S('Population', 'pop', fmtNum)}${S('GDP / capita', 'gdppc', fmtUsd)}${S('GDP growth', 'growth', fmtPct, 1)}${S('Inflation (CPI)', 'inflation', fmtPct)}${S('Unemployment', 'unemployment', (v) => `${v.toFixed(1)}%`)}</div>${stocks}
-      <div class="src">Sources: World Bank Open Data (latest available year) · Stooq (index, last daily close).</div>`;
+      <div class="src">Sources: World Bank Open Data (latest available year) · Yahoo Finance (index, last daily close).</div>`;
   }
 
   const evCard = (e, opts = {}) => {
@@ -193,7 +193,7 @@
     if (m.crypto?.length) out += `<h3>Crypto · top ${m.crypto.length}</h3><ul class="rows">${m.crypto.map((x) => row(esc(x.name), x.symbol, '$' + px(x.price), x.chg)).join('')}</ul>`;
     const cf = [...(m.commodities || []).map((x) => row(esc(x.name), x.unit, px(x.price), x.chg)), ...(m.fx || []).map((x) => row(esc(x.name), '', px(x.price), x.chg))];
     if (cf.length) out += `<h3>Commodities &amp; FX</h3><ul class="rows">${cf.join('')}</ul>`;
-    return out + `<div class="src">Sources: Stooq (last daily close), CoinGecko, alternative.me. Updated ${ago(m.updated)}. Not financial advice.</div>`;
+    return out + `<div class="src">Sources: Yahoo Finance (last daily close), CoinGecko, alternative.me. Updated ${ago(m.updated)}. Not financial advice.</div>`;
   }
 
   /* ---------- ticker ---------- */

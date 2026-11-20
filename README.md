@@ -10,7 +10,7 @@ Dark 3D globe. Click a country → current headlines (5 categories), key indicat
 | Headlines (Top, Business, Tech, Science, Sports) | Google News RSS, per-country edition |
 | GDP, population, growth, inflation, unemployment | World Bank Open Data |
 | Public holidays | Nager.Date |
-| Stock indices, gold/oil, FX (last daily close) | Stooq |
+| Stock indices, gold/oil, FX (last daily close) | Yahoo Finance (Stooq fallback) |
 | Crypto top 10 (+ live BTC/ETH in browser), Fear & Greed | CoinGecko, alternative.me |
 | Elections & central bank dates | `data/events.json` (curated, each with source link) |
 
@@ -33,5 +33,5 @@ Edit `data/events.json`: `{ "date": "YYYY-MM-DD", "country": "US" | "EU" | "ALL"
 - Countries without a Google News edition still show indicators and holidays.
 - Countries with an election in the next 60 days pulse on the globe.
 - `events.json` was compiled from public calendars (IDEA, Wikipedia, Fed, service-public.fr); dates can shift — keep it updated.
-- Some Stooq index symbols may be missing; they are skipped silently.
+- Some index symbols may be missing; they are skipped silently.
 - News links belong to their publishers; the site only shows headline, source and link.
